@@ -1,4 +1,4 @@
 [submodule "pilight"]
 	path = pilight
 	url = https://github.com/woutput/pilight
-	branch = patch-1
+	branch = woutput-patch-1
