@@ -53,10 +53,10 @@ static int validate(void) {
 	// Check for match in raw length
 	if (selectplus_doorbell->rawlen == RAW_LENGTH) {
 		// Check for match in header (short pulse) and footer (long pulse)
-		if (selectplus_doorbell->raw[0] >= MIN_SHORT_PULSE_LENGTH) &&
-		   (selectplus_doorbell->raw[0] <= MAX_SHORT_PULSE_LENGTH) &&
-		   (selectplus_doorbell->raw[RAW_LENGTH - 1] >= MIN_LONG_PULSE_LENGTH) &&
-		   (selectplus_doorbell->raw[RAW_LENGTH - 1] <= MAX_LONG_PULSE_LENGTH) {
+		if ((selectplus_doorbell->raw[0] >= MIN_SHORT_PULSE_LENGTH) &&
+		    (selectplus_doorbell->raw[0] <= MAX_SHORT_PULSE_LENGTH) &&
+		    (selectplus_doorbell->raw[RAW_LENGTH - 1] >= MIN_LONG_PULSE_LENGTH) &&
+		    (selectplus_doorbell->raw[RAW_LENGTH - 1] <= MAX_LONG_PULSE_LENGTH)) {
 			return 0;
 		}
 	}
@@ -93,8 +93,6 @@ static void parseCode(void) {
 			return; // decoding failed, return without creating message
 		}
 	}
-
-	state = 1; // on
 
 	int id = binToDec(binary, 0, BINARY_LENGTH - 1);
 	createMessage(id);
@@ -145,7 +143,6 @@ static void createFooter(void) {
 
 static int createCode(struct JsonNode *code) {
 	int id = -1;
-	int state = 1;
 	double itmp = -1;
 
 	if (json_find_number(code, "id", &itmp) == 0)
