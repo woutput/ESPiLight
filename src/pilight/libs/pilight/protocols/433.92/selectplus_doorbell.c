@@ -44,19 +44,19 @@
 #define MAX_LONG_PULSE_LENGTH	(AVG_LONG_PULSE_LENGTH + 0.5 * PEAK_TO_PEAK_JITTER)
 
 #define RAW_LENGTH		36
-// Two pulses per bit, first pulse is header, last pulse is footer
-#define BINARY_LENGTH		17
+// One pulse per bit, first 27 pulses are ID, last 9 pulses are footer
+#define BINARY_LENGTH		27
 
 #define NORMAL_REPEATS		68
 
 static int validate(void) {
 	// Check for match in raw length
 	if (selectplus_doorbell->rawlen == RAW_LENGTH) {
-		// Check for match in header (short pulse) and footer (long pulse)
-		if ((selectplus_doorbell->raw[0] >= MIN_SHORT_PULSE_LENGTH) &&
-		    (selectplus_doorbell->raw[0] <= MAX_SHORT_PULSE_LENGTH) &&
-		    (selectplus_doorbell->raw[RAW_LENGTH - 1] >= MIN_LONG_PULSE_LENGTH) &&
-		    (selectplus_doorbell->raw[RAW_LENGTH - 1] <= MAX_LONG_PULSE_LENGTH)) {
+		// Check for match in only part of footer
+		if ((selectplus_doorbell->raw[34] >= MIN_MEDIUM_PULSE_LENGTH) &&
+		    (selectplus_doorbell->raw[34] <= MAX_MEDIUM_PULSE_LENGTH) &&
+		    (selectplus_doorbell->raw[35] >= MIN_LONG_PULSE_LENGTH) &&
+		    (selectplus_doorbell->raw[35] <= MAX_LONG_PULSE_LENGTH)) {
 			return 0;
 		}
 	}
@@ -76,19 +76,15 @@ static void createMessage(int id) {
 }
 
 static void parseCode(void) {
-	int binary[BINARY_LENGTH], x, i = 0;
+	int binary[BINARY_LENGTH], x;
 
-	for (x = 1; x < selectplus_doorbell->rawlen - 1; x += 2) {
-		if ((selectplus_doorbell->raw[x] >= MIN_MEDIUM_PULSE_LENGTH) &&
-		    (selectplus_doorbell->raw[x] <= MAX_MEDIUM_PULSE_LENGTH) &&
-		    (selectplus_doorbell->raw[x + 1] >= MIN_SHORT_PULSE_LENGTH) &&
-		    (selectplus_doorbell->raw[x + 1] <= MAX_SHORT_PULSE_LENGTH)) {
-			binary[i++] = 0;
-		} else if ((selectplus_doorbell->raw[x] >= MIN_SHORT_PULSE_LENGTH) &&
-			   (selectplus_doorbell->raw[x] <= MAX_SHORT_PULSE_LENGTH) &&
-			   (selectplus_doorbell->raw[x + 1] >= MIN_MEDIUM_PULSE_LENGTH) &&
-			   (selectplus_doorbell->raw[x + 1] <= MAX_MEDIUM_PULSE_LENGTH)) {
-			binary[i++] = 1;
+	for (x = 0; x < BINARY_LENGTH; x += 1) {
+		if ((selectplus_doorbell->raw[x] >= MIN_SHORT_PULSE_LENGTH) &&
+		    (selectplus_doorbell->raw[x] <= MAX_SHORT_PULSE_LENGTH)) {
+			binary[x] = 0;
+		} else if ((selectplus_doorbell->raw[x] >= MIN_MEDIUM_PULSE_LENGTH) &&
+			   (selectplus_doorbell->raw[x] <= MAX_MEDIUM_PULSE_LENGTH)) {
+			binary[x] = 1;
 		} else {
 			return; // decoding failed, return without creating message
 		}
@@ -96,24 +92,6 @@ static void parseCode(void) {
 
 	int id = binToDec(binary, 0, BINARY_LENGTH - 1);
 	createMessage(id);
-}
-
-static void createLow(int start, int end) {
-	int i;
-
-	for (i = start; i <= end; i += 2) { // medium - short
-		selectplus_doorbell->raw[i] = AVG_MEDIUM_PULSE_LENGTH;
-		selectplus_doorbell->raw[i + 1] = AVG_SHORT_PULSE_LENGTH;
-	}
-}
-
-static void createHigh(int start, int end) {
-	int i;
-
-	for (i = start; i <= end; i += 2) { // short - medium
-		selectplus_doorbell->raw[i] = AVG_SHORT_PULSE_LENGTH;
-		selectplus_doorbell->raw[i + 1] = AVG_MEDIUM_PULSE_LENGTH;
-	}
 }
 
 static void createId(int id) {
@@ -124,21 +102,23 @@ static void createId(int id) {
 	length = decToBinRev(id, binary);
 	for (i = 0; i <= length; i++) {
 		if (binary[i] == 0) {
-			x = i * 2;
-			createLow(x, x + 1);
+			selectplus_doorbell->raw[i] = AVG_SHORT_PULSE_LENGTH;
 		} else { //so binary[i] == 1
-			x = i * 2;
-			createHigh(x, x + 1);
+			selectplus_doorbell->raw[i] = AVG_MEDIUM_PULSE_LENGTH;
 		}
 	}
 }
 
-static void createHeader(void) {
-	selectplus_doorbell->raw[0] = AVG_SHORT_PULSE_LENGTH;
-}
-
 static void createFooter(void) {
-	selectplus_doorbell->raw[RAW_LENGTH - 1] = AVG_LONG_PULSE_LENGTH;
+	selectplus_doorbell->raw[27] = AVG_SHORT_PULSE_LENGTH;
+	selectplus_doorbell->raw[28] = AVG_MEDIUM_PULSE_LENGTH;
+	selectplus_doorbell->raw[29] = AVG_SHORT_PULSE_LENGTH;
+	selectplus_doorbell->raw[30] = AVG_MEDIUM_PULSE_LENGTH;
+	selectplus_doorbell->raw[31] = AVG_SHORT_PULSE_LENGTH;
+	selectplus_doorbell->raw[32] = AVG_MEDIUM_PULSE_LENGTH;
+	selectplus_doorbell->raw[33] = AVG_SHORT_PULSE_LENGTH;
+	selectplus_doorbell->raw[34] = AVG_MEDIUM_PULSE_LENGTH;
+	selectplus_doorbell->raw[35] = AVG_LONG_PULSE_LENGTH;
 }
 
 static int createCode(struct JsonNode *code) {
@@ -151,12 +131,11 @@ static int createCode(struct JsonNode *code) {
 	if (id == -1) {
 		logprintf(LOG_ERR, "selectplus_doorbell: insufficient number of arguments; provide id");
 		return EXIT_FAILURE;
-	} else if (id > 131071 || id < 0) {
-		logprintf(LOG_ERR, "selectplus_doorbell: invalid id range. id should be between 0 and 131071");
+	} else if (id > 134217727 || id < 0) { // 2 ^ 27 - 1
+		logprintf(LOG_ERR, "selectplus_doorbell: invalid id range. id should be between 0 and 134217727");
 		return EXIT_FAILURE;
 	} else {
 		createMessage(id);
-		createHeader();
 		createId(id);
 		createFooter();
 		selectplus_doorbell->rawlen = RAW_LENGTH;
@@ -185,12 +164,7 @@ void selectplusDoorbellInit(void) {
 	selectplus_doorbell->maxgaplen = MAX_LONG_PULSE_LENGTH;
 	selectplus_doorbell->mingaplen = MIN_LONG_PULSE_LENGTH;
 
-	options_add(&selectplus_doorbell->options, "t", "on", OPTION_NO_VALUE, DEVICES_STATE, JSON_STRING, NULL, NULL);
-	options_add(&selectplus_doorbell->options, "f", "off", OPTION_NO_VALUE, DEVICES_STATE, JSON_STRING, NULL, NULL);
-	options_add(&selectplus_doorbell->options, "u", "unit", OPTION_HAS_VALUE, DEVICES_ID, JSON_NUMBER, NULL, "^([1-4])$");
-	options_add(&selectplus_doorbell->options, "i", "id", OPTION_HAS_VALUE, DEVICES_ID, JSON_NUMBER, NULL, "^([0-9]{1}|[0-9]{2}|[0-9]{3}|[0-9]{4}|[0-9]{5}|[0-9]{6})$");
-	options_add(&selectplus_doorbell->options, "a", "all", OPTION_OPT_VALUE, DEVICES_OPTIONAL, JSON_NUMBER, NULL, NULL);
-	options_add(&selectplus_doorbell->options, "l", "learn", OPTION_NO_VALUE, DEVICES_OPTIONAL, JSON_NUMBER, NULL, NULL);
+	options_add(&selectplus_doorbell->options, "i", "id", OPTION_HAS_VALUE, DEVICES_ID, JSON_NUMBER, NULL, "^([0-9]{1}|[0-9]{2}|[0-9]{3}|[0-9]{4}|[0-9]{5}|[0-9]{6}|[0-9]{7}|[0-9]{8}|[0-9]{9})$");
 
 	options_add(&selectplus_doorbell->options, "0", "readonly", OPTION_HAS_VALUE, GUI_SETTING, JSON_NUMBER, (void *)0, "^[10]$");
 	options_add(&selectplus_doorbell->options, "0", "confirm", OPTION_HAS_VALUE, GUI_SETTING, JSON_NUMBER, (void *)0, "^[10]$");
