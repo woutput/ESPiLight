@@ -66,12 +66,7 @@ static int validate(void) {
 
 static void createMessage(int id) {
 	selectplus_doorbell->message = json_mkobject();
-
 	json_append_member(selectplus_doorbell->message, "id", json_mknumber(id, 0));
-
-	// There is no on/off for a doorbell; always assume "on"
-	json_append_member(selectplus_doorbell->message, "state", json_mkstring("on"));
-
 	selectplus_doorbell->txrpt = NORMAL_REPEATS;
 }
 
@@ -145,8 +140,7 @@ static int createCode(struct JsonNode *code) {
 
 
 static void printHelp(void) {
-	printf("\t -t --on\t\t\tring the doorbell\n");
-	printf("\t -i --id=id\t\t\tcontrol a device with this id\n");
+	printf("\t -i --id=id\t\t\tring the doorbell with this id\n");
 }
 
 #if !defined(MODULE) && !defined(_WIN32)
